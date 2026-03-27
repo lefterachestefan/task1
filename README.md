@@ -52,9 +52,40 @@ The server will start at `http://127.0.0.1:8080`.
 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
-| `/health` | `GET` | Simple health check. |
-| `/listings` | `GET` | Returns a list of the first 50 listings in JSON format. |
-| `/listings/{id}` | `GET` | Returns details for a specific listing by its UUID. |
+| `/health` | `GET` | Returns `{"status":"ok"}`. |
+| `/listings` | `GET` | Returns listing summaries (excluding title/description) sorted by ID. |
+| `/listings/{id}` | `GET` | Returns full listing details for a single ID. |
+
+### /listings Query Parameters
+
+All parameters are optional and inclusive:
+- `min_rooms`, `max_rooms`
+- `min_price`, `max_price`
+- `listing_type` (sale or rent)
+- `min_area`, `max_area`
+- `min_floor`, `max_floor`
+- `tags` (comma-separated, AND semantics)
+- `min_lat`, `max_lat`, `min_lon`, `max_lon` (bounding box)
+- `limit` (1..500, default 100)
+
+## Demo
+
+### 1. Health Check
+```bash
+curl -s http://127.0.0.1:8080/health
+```
+
+### 2. Filtered Listings
+```bash
+# Get 3-room apartments for rent under 1500 with a quiet tag
+curl -s "http://127.0.0.1:8080/listings?min_rooms=3&listing_type=rent&max_price=1500&tags=quiet" | jq .
+```
+
+### 3. Single Listing Detail
+```bash
+# Use an ID from the listings response
+curl -s http://127.0.0.1:8080/listings/0009abff-42bd-be68-5417-8c7e61e6a2f9 | jq .
+```
 
 ## Development
 

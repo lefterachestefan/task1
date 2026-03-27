@@ -14,7 +14,20 @@ struct Listing {
     area_sqm: f64,
     price: f64,
     listing_type: String,
-    tags: String, // Stored as TEXT in DB, contains JSON string
+    tags: String,
+    lat: f64,
+    lon: f64,
+    floor: i32,
+}
+
+#[derive(Serialize, Deserialize, sqlx::FromRow)]
+struct ListingSummary {
+    id: String,
+    rooms: i32,
+    area_sqm: f64,
+    price: f64,
+    listing_type: String,
+    tags: String,
     lat: f64,
     lon: f64,
     floor: i32,
@@ -45,12 +58,14 @@ struct AppState {
 
 #[get("/health")]
 async fn health_check() -> impl Responder {
-    HttpResponse::Ok().body("OK")
+    HttpResponse::Ok().json(serde_json::json!({"status": "ok"}))
 }
 
 #[get("/listings")]
 async fn get_listings(filters: web::Query<ListingFilters>, data: web::Data<AppState>) -> impl Responder {
-    let mut query_builder: sqlx::QueryBuilder<Postgres> = sqlx::QueryBuilder::new("SELECT * FROM listings WHERE 1=1 ");
+    let mut query_builder: sqlx::QueryBuilder<Postgres> = sqlx::QueryBuilder::new(
+        "SELECT id, rooms, area_sqm, price, listing_type, tags, lat, lon, floor FROM listings WHERE 1=1 "
+    );
 
     if let Some(min_rooms) = filters.min_rooms {
         query_builder.push(" AND rooms >= ").push_bind(min_rooms);
@@ -94,14 +109,15 @@ async fn get_listings(filters: web::Query<ListingFilters>, data: web::Data<AppSt
 
     if let Some(ref tags_str) = filters.tags {
         let tags_vec: Vec<&str> = tags_str.split(',').collect();
-        // Use JSONB containment operator for AND semantics
         query_builder.push(" AND tags::jsonb @> ").push_bind(serde_json::to_string(&tags_vec).unwrap_or_default()).push("::jsonb");
     }
+
+    query_builder.push(" ORDER BY id ASC");
 
     let limit = filters.limit.unwrap_or(100).clamp(1, 500);
     query_builder.push(" LIMIT ").push_bind(limit);
 
-    let result = query_builder.build_query_as::<Listing>().fetch_all(&data.db).await;
+    let result = query_builder.build_query_as::<ListingSummary>().fetch_all(&data.db).await;
 
     match result {
         Ok(listings) => HttpResponse::Ok().json(listings),
@@ -167,8 +183,8 @@ mod tests {
         let req = test::TestRequest::get().uri("/health").to_request();
         let resp = test::call_service(&app, req).await;
         assert!(resp.status().is_success());
-        let body = test::read_body(resp).await;
-        assert_eq!(body, actix_web::web::Bytes::from_static(b"OK"));
+        let body: serde_json::Value = test::read_body_json(resp).await;
+        assert_eq!(body, serde_json::json!({"status": "ok"}));
     }
 
     #[actix_web::test]
@@ -191,8 +207,13 @@ mod tests {
         let resp = test::call_service(&app, req).await;
         assert!(resp.status().is_success());
 
-        let listings: Vec<Listing> = test::read_body_json(resp).await;
+        let listings: Vec<ListingSummary> = test::read_body_json(resp).await;
         assert!(!listings.is_empty());
+        
+        // Verify sort order
+        for i in 0..listings.len()-1 {
+            assert!(listings[i].id <= listings[i+1].id);
+        }
     }
 
     #[actix_web::test]
@@ -218,7 +239,7 @@ mod tests {
         let resp = test::call_service(&app, req).await;
         assert!(resp.status().is_success());
 
-        let listings: Vec<Listing> = test::read_body_json(resp).await;
+        let listings: Vec<ListingSummary> = test::read_body_json(resp).await;
         for listing in listings {
             assert!(listing.rooms >= 3);
             assert!(listing.price <= 2000.0);
@@ -231,7 +252,7 @@ mod tests {
         let resp = test::call_service(&app, req).await;
         assert!(resp.status().is_success());
 
-        let listings: Vec<Listing> = test::read_body_json(resp).await;
+        let listings: Vec<ListingSummary> = test::read_body_json(resp).await;
         for listing in listings {
             assert!(listing.tags.contains("furnished"));
             assert!(listing.tags.contains("quiet"));
@@ -258,7 +279,7 @@ mod tests {
         // First, get all listings to find a valid ID
         let req = test::TestRequest::get().uri("/listings").to_request();
         let resp = test::call_service(&app, req).await;
-        let listings: Vec<Listing> = test::read_body_json(resp).await;
+        let listings: Vec<ListingSummary> = test::read_body_json(resp).await;
         let test_id = &listings[0].id;
 
         // Now test the detail endpoint
