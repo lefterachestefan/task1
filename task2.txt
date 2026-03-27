@@ -1,0 +1,44 @@
+Backend - Task 2 - Clustering
+Objective
+Implement map clustering endpoint behavior on top of your existing API. This is a mandatory feature for mobile and web map views that show many listings at once, because clustering keeps the UI readable and responsive instead of rendering hundreds of overlapping points.
+Data Setup
+Use the same 1k dataset:
+
+https://drive.google.com/file/d/1jT_isHO5P08hO38_DTeTsdO__FIbmfD-/view?usp=sharing
+
+Use your existing MySQL or PostgreSQL environment.
+Required Endpoint
+GET /listings/clusters
+Required query params:
+
+min_lat, max_lat, min_lon, max_lon
+
+Optional filters (same meaning as /listings):
+
+min_rooms, max_rooms
+min_price, max_price
+listing_type
+min_area, max_area
+min_floor, max_floor
+tags
+
+Cluster control:
+
+max_clusters query parameter on this endpoint (default 10, max 10)
+Response Contract
+Return an array of cluster points:
+
+Each item must contain lat, lon, count
+lat and lon are the representative map coordinates of the cluster (for example a centroid or another stable representative point), not necessarily an exact listing location
+count is how many listings are represented by that cluster point (after applying bbox and optional filters), and must be an integer >= 1
+Total number of returned clusters must be <= max_clusters
+
+The exact clustering algorithm is your choice.
+Deliverables
+Updated API implementation with /listings/clusters.
+Short explanation of your clustering strategy and trade-offs.
+Demo showing:
+cluster calls with different bboxes
+cluster calls with extra filters
+max_clusters behavior
+

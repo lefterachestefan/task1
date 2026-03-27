@@ -52,19 +52,45 @@ struct ListingFilters {
     limit: Option<i32>,
 }
 
+impl ListingFilters {
+    fn is_search(&self) -> bool {
+        self.min_rooms.is_some() || self.max_rooms.is_some() ||
+        self.min_price.is_some() || self.max_price.is_some() ||
+        self.listing_type.is_some() ||
+        self.min_area.is_some() || self.max_area.is_some() ||
+        self.min_floor.is_some() || self.max_floor.is_some() ||
+        self.tags.is_some() ||
+        self.min_lat.is_some() || self.max_lat.is_some() ||
+        self.min_lon.is_some() || self.max_lon.is_some()
+    }
+}
+
 struct AppState {
     db: Pool<Postgres>,
 }
 
 #[get("/health")]
-async fn health_check() -> impl Responder {
-    HttpResponse::Ok().json(serde_json::json!({"status": "ok"}))
+async fn health_check(data: web::Data<AppState>) -> impl Responder {
+    match sqlx::query("SELECT 1").execute(&data.db).await {
+        Ok(_) => HttpResponse::Ok().json(serde_json::json!({"status": "ok"})),
+        Err(e) => {
+            eprintln!("Health check database error: {}", e);
+            HttpResponse::ServiceUnavailable().json(serde_json::json!({"status": "error"}))
+        }
+    }
 }
 
 #[get("/listings")]
 async fn get_listings(filters: web::Query<ListingFilters>, data: web::Data<AppState>) -> impl Responder {
+    let is_search = filters.is_search();
+    let select_fields = if is_search {
+        "id, rooms, area_sqm, price, listing_type, tags, lat, lon, floor"
+    } else {
+        "*"
+    };
+
     let mut query_builder: sqlx::QueryBuilder<Postgres> = sqlx::QueryBuilder::new(
-        "SELECT id, rooms, area_sqm, price, listing_type, tags, lat, lon, floor FROM listings WHERE 1=1 "
+        format!("SELECT {} FROM listings WHERE 1=1 ", select_fields)
     );
 
     if let Some(min_rooms) = filters.min_rooms {
@@ -117,13 +143,23 @@ async fn get_listings(filters: web::Query<ListingFilters>, data: web::Data<AppSt
     let limit = filters.limit.unwrap_or(100).clamp(1, 500);
     query_builder.push(" LIMIT ").push_bind(limit);
 
-    let result = query_builder.build_query_as::<ListingSummary>().fetch_all(&data.db).await;
-
-    match result {
-        Ok(listings) => HttpResponse::Ok().json(listings),
-        Err(e) => {
-            eprintln!("Error fetching listings: {}", e);
-            HttpResponse::InternalServerError().finish()
+    if is_search {
+        let result = query_builder.build_query_as::<ListingSummary>().fetch_all(&data.db).await;
+        match result {
+            Ok(listings) => HttpResponse::Ok().json(listings),
+            Err(e) => {
+                eprintln!("Error fetching listings: {}", e);
+                HttpResponse::InternalServerError().finish()
+            }
+        }
+    } else {
+        let result = query_builder.build_query_as::<Listing>().fetch_all(&data.db).await;
+        match result {
+            Ok(listings) => HttpResponse::Ok().json(listings),
+            Err(e) => {
+                eprintln!("Error fetching listings: {}", e);
+                HttpResponse::InternalServerError().finish()
+            }
         }
     }
 }
@@ -152,11 +188,12 @@ async fn main() -> std::io::Result<()> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    
+    // Use connect_lazy to avoid panicking if the DB is down at startup
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(&database_url)
-        .await
-        .expect("Failed to create pool");
+        .connect_lazy(&database_url)
+        .expect("Failed to create lazy pool");
 
     println!("Server running at http://127.0.0.1:8080");
 
@@ -179,7 +216,19 @@ mod tests {
 
     #[actix_web::test]
     async fn test_health_check() {
-        let app = test::init_service(App::new().service(health_check)).await;
+        dotenv().ok();
+        let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        let pool = PgPoolOptions::new()
+            .max_connections(1)
+            .connect_lazy(&database_url)
+            .expect("Failed to create pool");
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(AppState { db: pool.clone() }))
+                .service(health_check)
+        ).await;
+
         let req = test::TestRequest::get().uri("/health").to_request();
         let resp = test::call_service(&app, req).await;
         assert!(resp.status().is_success());
@@ -193,8 +242,7 @@ mod tests {
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
         let pool = PgPoolOptions::new()
             .max_connections(1)
-            .connect(&database_url)
-            .await
+            .connect_lazy(&database_url)
             .expect("Failed to create pool");
 
         let app = test::init_service(
@@ -207,8 +255,10 @@ mod tests {
         let resp = test::call_service(&app, req).await;
         assert!(resp.status().is_success());
 
-        let listings: Vec<ListingSummary> = test::read_body_json(resp).await;
+        // Without search, it should return full Listings (including title)
+        let listings: Vec<Listing> = test::read_body_json(resp).await;
         assert!(!listings.is_empty());
+        assert!(!listings[0].title.is_empty());
         
         // Verify sort order
         for i in 0..listings.len()-1 {
@@ -222,8 +272,7 @@ mod tests {
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
         let pool = PgPoolOptions::new()
             .max_connections(1)
-            .connect(&database_url)
-            .await
+            .connect_lazy(&database_url)
             .expect("Failed to create pool");
 
         let app = test::init_service(
@@ -265,8 +314,7 @@ mod tests {
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
         let pool = PgPoolOptions::new()
             .max_connections(1)
-            .connect(&database_url)
-            .await
+            .connect_lazy(&database_url)
             .expect("Failed to create pool");
 
         let app = test::init_service(
@@ -279,7 +327,7 @@ mod tests {
         // First, get all listings to find a valid ID
         let req = test::TestRequest::get().uri("/listings").to_request();
         let resp = test::call_service(&app, req).await;
-        let listings: Vec<ListingSummary> = test::read_body_json(resp).await;
+        let listings: Vec<Listing> = test::read_body_json(resp).await;
         let test_id = &listings[0].id;
 
         // Now test the detail endpoint
