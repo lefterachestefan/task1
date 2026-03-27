@@ -1,0 +1,67 @@
+
+Backend - Task 1 - Listings API Basics
+This challenge is delivered in 3 tasks. You will only receive one task at a time.
+How The Process Works
+You receive the current task document from the mentor.
+You implement and demo your solution.
+Mentor reviews your work.
+If approved, mentor unlocks the next task.
+After Task 3 work is complete, mentor runs the final standalone evaluator on your machine.
+
+Do not assume future tasks or requirements that have not been unlocked yet.
+Global Technical Rules
+You may use any language and web framework.
+Your storage engine must be either MySQL or PostgreSQL.
+SQLite is not allowed for this challenge.
+Do not preload the full dataset into memory as an optimization strategy.
+Your API must query data from the database path throughout the challenge.
+Submission Expectations Per Task
+Source code with runnable startup instructions.
+Database migration/schema setup needed by your implementation.
+A short note describing trade-offs and known limitations.
+A short demo (live or recorded) covering the required behavior for the current task.
+Objective
+Build core API behavior for:
+
+Filtered listing search (GET /listings)
+Single listing details (GET /listings/{listing_id})
+
+Use the 1k SQL dump and load it into MySQL or PostgreSQL.
+Data Setup
+Download the 1k SQL dump from: https://drive.google.com/file/d/1jT_isHO5P08hO38_DTeTsdO__FIbmfD-/view?usp=sharing
+Create a local MySQL or PostgreSQL database.
+Import the SQL dump.
+Configure your app to read from that database.
+Required Endpoints
+GET /health
+Returns {"status":"ok"}.
+GET /listings
+Return listing summaries with support for these query parameters:
+
+min_rooms, max_rooms
+min_price, max_price
+listing_type (sale or rent)
+min_area, max_area
+min_floor, max_floor
+tags (comma-separated, AND semantics)
+min_lat, max_lat, min_lon, max_lon (inclusive bbox)
+limit (1..500, default 100)
+
+Response items must include:
+
+id, rooms, area_sqm, price, listing_type, tags, lat, lon, floor
+
+Do not include title or description in search responses.
+
+Sort results by ID.
+GET /listings/{listing_id}
+Return full listing details for a single listing id, including:
+
+id, title, description, rooms, area_sqm, price, listing_type, tags, lat, lon, floor
+Deliverables
+Running API implementation.
+DB setup/import steps in your own project README.
+A short demo showing:
+/health
+/listings with multiple filter combinations
+/listings/{listing_id}
