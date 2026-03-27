@@ -54,6 +54,7 @@ The server will start at `http://127.0.0.1:8080`.
 | :--- | :--- | :--- |
 | `/health` | `GET` | Returns `{"status":"ok"}`. |
 | `/listings` | `GET` | Returns listing summaries (excluding title/description) sorted by ID. |
+| `/listings/clusters` | `GET` | Returns grouped clusters for map views (Task 2). |
 | `/listings/{id}` | `GET` | Returns full listing details for a single ID. |
 
 ### /listings Query Parameters
@@ -68,6 +69,17 @@ All parameters are optional and inclusive:
 - `min_lat`, `max_lat`, `min_lon`, `max_lon` (bounding box)
 - `limit` (1..500, default 100)
 
+### /listings/clusters (Task 2)
+
+This endpoint provides map clustering functionality for high-density views.
+**Clustering Strategy:** Grid-based clustering performed in-database. The bounding box is divided into a grid (e.g., 3x3) based on `max_clusters`, and the centroid (average lat/lon) and count of listings are calculated for each cell.
+**Trade-offs:** 
+- **Pros:** High performance (all calculations done in SQL), stable representative points, and very low memory overhead.
+- **Cons:** Fixed grid boundaries don't adapt to point density (unlike K-means).
+
+**Required Params:** `min_lat`, `max_lat`, `min_lon`, `max_lon`.
+**Optional Params:** All filters from `/listings` + `max_clusters` (default 10, max 10).
+
 ## Demo
 
 ### 1. Health Check
@@ -75,7 +87,16 @@ All parameters are optional and inclusive:
 curl -s http://127.0.0.1:8080/health
 ```
 
-### 2. Filtered Listings
+### 2. Map Clustering (Task 2)
+```bash
+# Cluster with bounding box and max 5 clusters
+curl -s "http://127.0.0.1:8080/listings/clusters?min_lat=40&max_lat=50&min_lon=20&max_lon=30&max_clusters=5" | jq .
+
+# Cluster with extra filters (only 'rent' listings)
+curl -s "http://127.0.0.1:8080/listings/clusters?min_lat=0&max_lat=90&min_lon=0&max_lon=180&listing_type=rent" | jq .
+```
+
+### 3. Filtered Listings
 ```bash
 # Get 3-room apartments for rent under 1500 with a quiet tag
 curl -s "http://127.0.0.1:8080/listings?min_rooms=3&listing_type=rent&max_price=1500&tags=quiet" | jq .
