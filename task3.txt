@@ -1,0 +1,31 @@
+Backend - Task 3 - Optimization For 1M Dataset
+Objective
+Optimize your existing implementation so it remains correct and responsive on the 1M dataset.
+Data Setup
+Download 1M SQL dump: https://drive.google.com/file/d/1Gzg2gmKdzQajtqDS37MRBS9C6Mcxo537/view?usp=sharing
+Import into a clean MySQL or PostgreSQL instance.
+Point your application to this 1M database.
+What You Should Optimize
+Query plans for filtered search.
+Query plans for clustering requests with bbox + filters.
+Index strategy for common access patterns.
+Response-time stability under repeated calls.
+Hard Constraints
+MySQL or PostgreSQL only.
+No SQLite.
+No full dataset preload into RAM.
+No bypassing DB query execution by keeping a shadow copy in memory.
+Suggested Validation (Before Mentor Review)
+Run repeated requests for representative 1M scenarios:
+small bbox + limit
+wider bbox + selective filters
+clustering with required bbox and additional filters
+Confirm all endpoint contracts from Tasks 1 and 2 still hold.
+Capture simple latency notes (mean/p95 if possible) for your own tracking.
+Deliverables
+Optimized implementation for the 1M dataset.
+Short note with:
+what bottlenecks you found
+what optimizations you applied
+any trade-offs you made
+Demo on the 1M dataset.
